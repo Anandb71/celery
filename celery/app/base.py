@@ -1117,6 +1117,12 @@ class Celery:
         ignore_result = options.pop('ignore_result', False)
         options = router.route(
             options, route_name or name, args, kwargs, task_type)
+        # Registered tasks get task_default_priority through their
+        # ``priority`` attribute, but a task sent only by name has no
+        # task class to carry it.
+        if (task_type is None and options.get('priority') is None and
+                conf.task_default_priority is not None):
+            options['priority'] = conf.task_default_priority
 
         if eta or countdown:
             driver_type = self.producer_pool.connections.connection.transport.driver_type

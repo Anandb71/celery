@@ -2185,6 +2185,40 @@ class test_App:
         self.app.amqp.send_task_message.assert_called_once()
 
     @patch('celery.app.base.detect_quorum_queues', return_value=[False, ""])
+    def test_send_task_unregistered_task_uses_default_priority(self, detect_quorum_queues):
+        """task_default_priority should apply to task names that are not registered."""
+        self.app.conf.task_default_priority = 5
+
+        connection = Mock(name='connection')
+        router = Mock(name='router')
+        router.route.side_effect = lambda opts, *a, **kw: opts
+        self.app.amqp = Mock(name='amqp')
+        self.app.amqp.Producer.attach_mock(ContextMock(), 'return_value')
+
+        self.app.send_task('unregistered_task', (1,),
+                           connection=connection, router=router)
+        assert self.app.amqp.send_task_message.call_args[1]['priority'] == 5
+
+        self.app.send_task('unregistered_task', (1,),
+                           connection=connection, router=router, priority=1)
+        assert self.app.amqp.send_task_message.call_args[1]['priority'] == 1
+
+    @patch('celery.app.base.detect_quorum_queues', return_value=[False, ""])
+    def test_send_task_unregistered_task_keeps_route_priority(self, detect_quorum_queues):
+        """A priority set by a route should win over task_default_priority."""
+        self.app.conf.task_default_priority = 5
+
+        connection = Mock(name='connection')
+        router = Mock(name='router')
+        router.route.side_effect = lambda opts, *a, **kw: dict(opts, priority=9)
+        self.app.amqp = Mock(name='amqp')
+        self.app.amqp.Producer.attach_mock(ContextMock(), 'return_value')
+
+        self.app.send_task('unregistered_task', (1,),
+                           connection=connection, router=router)
+        assert self.app.amqp.send_task_message.call_args[1]['priority'] == 9
+
+    @patch('celery.app.base.detect_quorum_queues', return_value=[False, ""])
     def test_send_task_with_task_time_limit_no_duplicate_kwargs(self, detect_quorum_queues):
         """send_task should not raise TypeError when the registered task has time_limit set."""
 
